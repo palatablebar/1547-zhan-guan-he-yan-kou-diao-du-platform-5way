@@ -16,6 +16,7 @@ AI/ML · 传统ML · 中型
 | M6 | 入口偏移 | 差异定位和外推审查 | `src/venuegate/venue_shift/service.py` | `tests/test_venue_shift.py` |
 | M7 | 核验分派 | 硬规则与额度分配 | `src/venuegate/usher_capacity/service.py` | `tests/test_usher_capacity.py` |
 | M8 | 值班登记 | 单据及额度证据 | `src/venuegate/entrance_register/service.py` | `tests/test_entrance_register.py` |
+| M9 | 关停迁移 | 迁移单、应急通道与迁回裁决 | `src/venuegate/entry_migration/service.py` | `tests/test_entry_migration.py` |
 
 ## 深度登记
 
@@ -30,3 +31,8 @@ AI/ML · 传统ML · 中型
 | TRAP-44 | 校准样本不足 | 分派前转人工判读并保留原因 | `src/venuegate/gate_backtest/service.py` | `tests/test_gate_backtest.py::test_empty_calibration_requires_review` |
 | TRAP-53 | 单条推断与混批 | 复用冻结参数，各条估计完全一致 | `src/venuegate/visitor_counts/service.py` | `tests/test_visitor_counts.py::test_input_batch_invariance` |
 | TRAP-54 | 特征版本与模型不配对 | 拒绝继续推断并要求重拟合 | `src/venuegate/visitor_counts/service.py` | `tests/test_visitor_counts.py::test_mismatched_model_input_version_fails` |
+| TRAP-61 | 同一关停事件重跑 | 合并为一张迁移单，编号与签收码稳定 | `src/venuegate/entry_migration/service.py` | `tests/test_entry_migration.py::test_repeated_event_does_not_add_another_sheet_or_move_people_twice` |
+| TRAP-62 | 迁移后原口仍计入 | 原口减出、接收口加人，总量守恒 | `src/venuegate/entry_migration/service.py` | `tests/test_entry_migration.py::test_closed_entrance_no_longer_counts_migrated_people` |
+| TRAP-63 | 接收口吃满应急通道 | 按少 1 条通道核算余量并标注预留 | `src/venuegate/entry_migration/service.py` | `tests/test_entry_migration.py::test_receiving_entrance_keeps_an_emergency_lane` |
+| TRAP-64 | 解除后立即全量迁回但余量不足 | 按恢复后高峰客流分批迁回 | `src/venuegate/entry_migration/service.py` | `tests/test_entry_migration.py::test_pending_batches_return_in_waves_when_peak_exceeds_restored_headroom` |
+| TRAP-65 | 已完成批次被迁回 | 解除前窗已结束的不回迁 | `src/venuegate/entry_migration/service.py` | `tests/test_entry_migration.py::test_completed_batches_never_return` |

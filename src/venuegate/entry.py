@@ -46,7 +46,7 @@ def overview():
 def run_case():
     try:
         posted = request.get_json()
-        if not isinstance(posted, dict) or posted.keys() - {'capacity', 'strategy', 'records', 'as_of'}:
+        if not isinstance(posted, dict) or posted.keys() - {'capacity', 'strategy', 'records', 'as_of', 'closures'}:
             raise ValueError('请求字段无效')
         mode = posted.get('strategy', 'balanced')
         capacity, strategy = validate_parameters(posted.get('capacity', 12), mode)
@@ -57,7 +57,8 @@ def run_case():
         as_of = posted.get('as_of', 96)
         if type(as_of) is not int or not 91 <= as_of <= 3650:
             raise ValueError('截止日须在第 91 日后')
-        return jsonify(execute(posted['records'], capacity, strategy, as_of=as_of))
+        return jsonify(execute(posted['records'], capacity, strategy, as_of=as_of,
+                               closures=posted.get('closures', ())))
     except (BadRequest, UnsupportedMediaType):
         return jsonify(code='INVALID_JSON', message='请提交 JSON 对象'), 400
     except ValueError as issue:
@@ -105,7 +106,8 @@ def main():
         capacity, strategy = validate_parameters(args.capacity, args.strategy)
         if args.input:
             custom = open_fixture(args.input)
-            result = execute(custom['records'], capacity, strategy, as_of=custom.get('as_of', 96))
+            result = execute(custom['records'], capacity, strategy, as_of=custom.get('as_of', 96),
+                             closures=custom.get('closures', ()))
         else:
             result = sample(capacity, strategy)
     except (ValueError, OSError) as issue:

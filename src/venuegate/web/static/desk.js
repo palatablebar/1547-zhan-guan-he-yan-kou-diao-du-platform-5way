@@ -98,6 +98,42 @@ function renderMeasurements(card, row) {
     }
 }
 
+function migrationBlock(title, rows) {
+    if (!rows?.length) return null;
+    const block = node('details',undefined,'rejected');
+    block.append(node('summary',`${title} · ${rows.length} 条`));
+    showTables(block,rows);
+    return block;
+}
+
+function renderMigration(card, key) {
+    const sheet = ledger.migration;
+    if (!sheet?.sheets?.length) return;
+    const register = node('h3','关停迁移单','inner-heading');
+    card.append(register);
+    const scope = key
+        ? sheet.sheets.filter(item => item.lines.some(line => line.key === key) || item.returns.some(line => line.key === key))
+        : sheet.sheets;
+    if (!scope.length) {card.append(node('p','该批次不在任何关停事件范围内','empty'));return;}
+    for (const item of scope) {
+        const lines = item.lines.filter(line => !key || line.key === key).map(line => ({单号:line.key,原入口:line.source,
+            接收口:line.target ?? '—',处置:line.state,原因:line.reason,应急通道:line.reserve_lane ? '预留 1 条' : '—',说明:line.detail}));
+        const returns = item.returns.filter(line => !key || line.key === key).map(line => ({单号:line.key,
+            当前入口:line.source,回迁至:line.target,方式:line.mode,批次:line.wave,依据:line.reason}));
+        const head = `${item.sheet_id} · ${item.event.cohort} · ${item.event.start_day}–${item.event.end_day} · ${item.status}`;
+        const box = node('details',undefined,'rejected');
+        box.append(node('summary',head));
+        if (item.return_detail) box.append(node('p',item.return_detail,'detail-note'));
+        if (lines.length) showTables(box,lines);
+        if (returns.length) {box.append(node('h3','迁回裁决','inner-heading'));showTables(box,returns);}
+        card.append(box);
+    }
+    if (!key) {
+        const block = migrationBlock('关停对账',sheet.reconciliation);
+        if (block) card.append(block);
+    }
+}
+
 function showDetail() {
     const card = byId('detail-content');
     card.replaceChildren();
@@ -114,6 +150,7 @@ function showDetail() {
             card.append(node('h3',plan.operating_title,'inner-heading'));
             showTables(card,fieldNotes);
         }
+        renderMigration(card,currentItem.key);
         renderMeasurements(card,currentItem);
         return;
     }
@@ -128,6 +165,17 @@ function showDetail() {
             if (ticket) inspect(ticket);
         }});
         card.append(plan);
+    }
+    if (panel.migration_rows) {
+        const migration = node('details',undefined,'rejected');
+        migration.append(node('summary',`${panel.migration_title} · ${panel.migration_rows.length} 张`));
+        if (panel.migration_rows.length) showTables(migration,panel.migration_rows);
+        const blocks = [['迁移明细',panel.migration_lines],['接收口承接',panel.migration_receiving],['迁回裁决',panel.migration_returns],['关停对账',panel.migration_reconciliation]];
+        for (const [title,rows] of blocks) {
+            const block = migrationBlock(title,rows);
+            if (block) migration.append(block);
+        }
+        card.append(migration);
     }
     showTables(card,panel.records);
     if (panel.errors.length > 0) {

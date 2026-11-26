@@ -10,6 +10,7 @@ from .gate_backtest import service as calibration_service
 from .venue_shift import service as monitor_service
 from .usher_capacity import service as dispatch_service
 from .entrance_register import service as audit_service
+from .entry_migration import service as migration_service
 from .ticket_windows import contracts as window_contract
 
 PRESET = Path(__file__).resolve().parents[2] / 'sample_data' / 'entry_rotations_sample.json'
@@ -50,8 +51,9 @@ def stage_at(index, details, records, issues=()):
     return {'key': code, 'title': title, 'summary': details, 'records': list(records), 'errors': list(issues)}
 
 
-def rows_for(plan, scored, vectors):
+def rows_for(plan, scored, vectors, uncertain=()):
     by_key = {item.key: item for item in scored}
+    unsure = {item.raw.key for item in uncertain if item.uncertain}
     factor_names = ('单口预约', '校团集中度', '换场接驳压力', '早到雨压', '团队与核验口比')
     order = []
     for job in plan.jobs:
@@ -62,7 +64,10 @@ def rows_for(plan, scored, vectors):
         else:
             driver = ' · '.join(f'{amount:+.2f}' for amount in point.contributions)
         interval = ('–' if job.lower is None else f'{job.lower:.2f}–{job.upper:.2f}')
-        order.append({'key': job.key, 'zone': job.cohort, 'estimate': job.estimate, 'interval': interval,
+        order.append({'key': job.key, 'zone': job.cohort, 'day': point.day,
+                      'estimate': job.estimate, 'interval': interval,
+                      'upper': job.upper if job.upper is not None else job.estimate,
+                      'uncertain': job.key in unsure, 'excursions': list(point.excursions),
                       'state': job.state, 'cost': job.cost, 'reason': job.reason, 'evidence': job.summary,
                       'drivers': driver, 'missing': len(point.missing), 'hits': list(job.rule_hits),
                       'measurements': dict(zip(('reservations', 'school_groups', 'rain_mm', 'turnstiles', 'transfer_min', 'bus_eta'), point.input_values, strict=True)),
@@ -105,7 +110,7 @@ def calibrate_cell(source, oversight):
     return parameters,verified,output
 
 
-def execute(documents, capacity=12, mode='balanced', *, as_of=96):
+def execute(documents, capacity=12, mode='balanced', *, as_of=96, closures=()):
     intake, windows, state = worksheet(documents,as_of)
     features = feature_service.transform_windows(windows,state)
     kernel, fitted_calibration, (recent, shift) = calibrate_cell(features, state)
@@ -126,7 +131,7 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
         {'label': '额度结余', 'value': allocation.balance},
     ]
     vectors = {item.key: item for item in features.live}
-    row_list = rows_for(allocation, scored, vectors)
+    row_list = rows_for(allocation, scored, vectors, checked_live)
     operating_rows = dispatch_service.operating_ledger(row_list)
     overtime = calibration_service.boundary_diagnostics(evaluated, 155)
     sector = calibration_service.sector_replay(evaluated, 155)
@@ -160,10 +165,26 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
         row['joint_experiments'] = feature_service.render_joint_experiments(current,state,estimate)
     details[7]['records'].extend(audit_service.site_checklist(row_list))
     details[7]['records'].extend(audit_service.intervention_summary(row_list))
+    declared = migration_service.parse_closures(closures)
+    batches = [migration_batch(row) for row in row_list]
+    events = migration_service.derive_closures(batches, declared)
+    migration = migration_service.plan_migrations(events, batches, as_of=as_of)
+    migration_evidence = migration_service.migration_evidence(migration)
+    migration_payload = migration_service.migration_payload(migration)
+    summary = migration_payload['summary']
+    details[7]['summary'] = (f'处置凭证 {closed.stamp} · 额度守恒 · 关停迁移单 {summary["sheets"]} 张'
+                             f'（迁入 {summary["moved"]}、人工判读 {summary["manual"]}、迁回 {summary["returned"]}）')
+    details[7]['migration_title'] = '关停迁移单'
+    details[7]['migration_rows'] = migration_evidence['迁移单']
+    details[7]['migration_lines'] = migration_evidence['迁移明细']
+    details[7]['migration_returns'] = migration_evidence['迁回裁决']
+    details[7]['migration_receiving'] = migration_evidence['接收口承接']
+    details[7]['migration_reconciliation'] = migration_evidence['关停对账']
     overview_report = {'capacity' : capacity, 'mode': mode, 'as_of': as_of, 'sample_hash': closed.batch_hash,
               'policy_hash': closed.policy_hash, 'feature_stamp': state.fingerprint,
               'model': kernel.name, 'run_id': closed.stamp, 'object_name': DISPLAY['object_name'],
               'unit': DISPLAY['unit'], 'sections': details, 'flow_counts': list(states.items()),
+              'migration': migration_payload,
               'measures': {'reservations': ('预约票量', '张'),
  'school_groups': ('已申报团队', '团'),
  'rain_mm': ('短时雨量', 'mm'),
@@ -173,6 +194,14 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
     return overview_report
 
 
+def migration_batch(row):
+    return {'key': row['key'], 'cohort': row['zone'], 'day': row['day'], 'estimate': row['estimate'],
+            'upper': row['upper'], 'cost': row['cost'], 'state': row['state'],
+            'reason': row['reason'], 'evidence': row['evidence'],
+            'missing': row['missing'], 'excursions': bool(row['excursions']),
+            'uncertain': row['uncertain'], 'turnstiles': row['measurements']['turnstiles']}
+
+
 def preview(capacity=12, mode='balanced'):
     fixture = open_fixture()
-    return execute(fixture['records'], capacity, mode, as_of=fixture['as_of'])
+    return execute(fixture['records'], capacity, mode, as_of=fixture['as_of'], closures=fixture.get('closures', ()))

@@ -2881,5 +2881,35 @@
       "transfer_min": 28,
       "bus_eta": 12
     }
+  ],
+  "closures": [
+    {
+      "event": "CL-BOOTH-01",
+      "cohort": "展馆北门",
+      "start_day": 89,
+      "end_day": 97,
+      "reason": "备用核验口验电",
+      "released": false
+    },
+    {
+      "event": "CL-SHOW-02",
+      "cohort": "连廊入口",
+      "start_day": 88,
+      "end_day": 95,
+      "reason": "换场临时关停",
+      "released": true,
+      "released_day": 89,
+      "capacity_after": 2
+    },
+    {
+      "event": "CL-RAIN-03",
+      "cohort": "西登录厅",
+      "start_day": 90,
+      "end_day": 93,
+      "reason": "雨天内侧排线调整",
+      "released": true,
+      "released_day": 91,
+      "capacity_after": 10
+    }
   ]
 }

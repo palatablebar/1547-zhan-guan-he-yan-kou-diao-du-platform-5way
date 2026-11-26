@@ -11,6 +11,18 @@
 
 导入 JSON 对象时 `records` 为 1–2500 条单据，`as_of` 为整数工日；默认第 96 日。额度接受 1–60，策略接受 `balanced` 或 `focus`。入站异常保留于第一环节。整批缺少成熟窗口时响应 422 并给出原因。
 
+可同时提交 `closures`（关停事件数组，见 [字段说明](SPEC.md#关停迁移单)）。未提交时，因备用核验口验电而暂停的批次会按其暂停日生成一张隐含关停迁移单。运行结果的 `migration` 给出迁移单、迁回裁决与关停对账，第 8 环节另附签收表格。
+
+示例：
+
+```json
+{"records": [...], "as_of": 96, "capacity": 12,
+ "closures": [{"event": "CL-BOOTH-01", "cohort": "展馆北门", "start_day": 89, "end_day": 97,
+               "reason": "备用核验口验电"}]}
+```
+
+同一事件以相同编号和内容重复提交只会保留一张迁移单；编号相同而内容不同则返回 422。
+
 ```sh
 docker compose exec -T app python -m venuegate.entry evaluate --input sample_data/entry_rotations_sample.json --capacity 9
 ```
